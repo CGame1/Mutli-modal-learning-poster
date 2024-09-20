@@ -5,4 +5,6 @@
 
 [Open interactive figure:](https://cgame1.github.io/Mutli-modal-learning-poster/tsne.html)
 
+[Open interactive figure 2:](https://cgame1.github.io/Mutli-modal-learning-poster/index.html)
+
 
