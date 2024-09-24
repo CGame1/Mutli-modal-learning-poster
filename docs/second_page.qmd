@@ -1,0 +1,1251 @@
+---
+title: "YoloV8 classification + torch"
+format: html
+editor: visual
+
+
+# execute:
+#   python:
+#     executable: "C:\Users\chgam8840\.conda\envs\D1_imgclf\python.exe"
+jupyter: python3
+#  kernelspec:
+#    name: "conda-env-D1_imgclf-py"
+#    language: "python"
+#    display_name: "<YOUR_ENV_NAME>"
+---
+
+# 1) Formatting data for Training in YOLO
+
+<!--# General comments on things to change --> Testing git
+
+<!--# Consistency of variable name format i.e. camel case vs underscore, use of captials - not essential but is neater -->
+
+This workflow re-formats Biigle CSV reports into a dataset recognizable by YOLOV8 <https://docs.ultralytics.com/#ultralytics-yolov8>
+
+It needs:
+
+-   1 or more Biigle "CSV" volume reports which contain your image annotations (other report types will not work)
+
+-   Images to which the annotations correspond <!--# finish when you see format -->
+
+    -   Pathway from your local machine where the images are
+
+The data used to train the classification model must be in a specific format. Specifically, images of the different classes must be organised in folders:
+
+-   **ProjectName**
+    -   train
+        -   **label 1**
+            -   \[image1.jpg\]
+            -   \[image2.jpg\]
+            -   ...
+        -   **label 2**
+            -   \[image1.jpg\]
+            -   \[image2.jpg\]
+            -   ...
+        -   **label... n**
+            -   ...
+    -   test
+        -   **label 1**
+            -   \[image1.jpg\]
+            -   \[image2.jpg\]
+            -   ...
+        -   **label 2**
+            -   \[image1.jpg\]
+            -   \[image2.jpg\]
+            -   ...
+        -   **label... n**
+            -   ...
+
+IMPORTANT: Class labels should not contain spaces - you will likely encounter problems and is good coding practice i.e. Mixed Substrate -> Mixed_Substrate
+
+### Before you start!
+
+You will have to decide on a number of parameters before you start. More explanations will be given in the relevant document sections. Read the text carefully and remember to check what the resulting files look like. Mistakes are easy to miss and hard to track down once your model starts giving you unexpected results <!--# this last sentence is a bit confusing -->
+
+IMPORTANT: The most common cause for errors are wrong pathways. Make sure they are all correct but remember that they are also easy to change manually.
+
+## a. Setting up your environment
+
+First, load your packages, set the WD and set the pathways to the different folders
+
+```{r echo=FALSE}
+
+# 1) Sort packages    -------------------------------------------------------------------------------
+
+
+# list packages that will be needed
+packages <- c("jsonlite","httr", "imager", "magick", "tidyverse","reactablefmtr", "magrittr","reticulate","insight","quarto", "RColorBrewer","Cairo", "cvms", "caret", "insight")
+
+# install those packages that you dont have yet
+install.packages( 
+  setdiff(packages,installed.packages()[,1] )
+)
+
+if("reticulate" %in% setdiff(packages,installed.packages()[,1] )){
+  print("never used reticulate? you may have to install python or link your existing python interpreter to Rstudio ")
+  print("Install python or Anaconda")
+}  
+
+# Could we add a link here to reticulate/python help?
+# for exampe see: 
+# https://rstudio.github.io/reticulate/
+
+# Load packages
+library(reactablefmtr) # for tables display
+library(cvms) # for evaluating model performance
+library(caret) # for the model evaluation
+library(insight) # for coloured prints
+library(tidyverse) # for data manipulation/interaction
+library(magrittr) # for code readability
+library(reticulate) # for interacting with python
+library(jsonlite) # for interacting with JSON files
+# 2) Create folders   --------------------------------------------------------------------------------
+
+# UPDATE THE FOLLOWING:
+
+# Set path to folder where the script is
+wd <- "C:\\Users\\chgam8840\\OneDrive - University of Bergen\\Repos\\Benthic-Images-CV/Classify/GearInVideo"
+
+
+# Create path to folder that contains the images. If this contains zipped folder images as in tutorial, these will be unzipped.
+localImagesDir <- paste0(wd, "/images")
+
+# Create path to the folder where your Biigle reports are
+reportsFolder <- paste0(wd, "/reports")
+
+# Set whether you are using R studio
+usingRStudio <- FALSE
+
+#--------------------
+
+# Set your working directory to this folder
+setwd(wd)
+
+# Create path to folder for the class sorted dataset 
+sortedImagesDir <- paste0(wd, "/class_images")
+
+# sortedmetaDir <- paste0(wd,"/meta")
+# dir.create(sortedmetaDir)
+
+# Create path to folder where your train/test sorted images will be stored
+v8Dir <- paste0(sortedImagesDir , "/V8_dataset" )
+
+# Create path to the folder for the Yolo models and outputs
+yoloDir <- paste0(wd, "/yolo")
+
+# # this folder will contains the files that you will have to upload to Colab
+# paste0(yolo_dir,"/yolov8files") -> for_yolo_files
+# dir.create(for_yolo_files) # make the dir if you haven't 
+
+# # this folder will be used later once you have made predictions with your CNN
+# paste0(yolo_dir, "/YoloResults") -> yolo_results
+# dir.create(yolo_results) # make the dir if you haven't 
+
+
+# If not using R studio, you may not be able to access the R variables (e.g. paths) when you move to Python. In this case the following will save these to a file for later use in Python
+if (usingRStudio == FALSE) {
+
+  # List object names in R
+  rObjectNames <- ls()
+
+  # Extract contents of each object name and save to list
+  rObjects <- list()
+  for (name in rObjectNames) {
+
+    rObjects[[name]] <- get(name)
+
+  }
+
+  # Discount the r_objects list you have just made
+  rObjects <- rObjects[!names(rObjects) %in% "rObjects"]
+
+  # Convert the object to JSON
+  jsonData <- toJSON(rObjects, pretty = TRUE)
+
+  # Save the JSON to a file
+  writeLines(jsonData, con =  paste0(wd,"//rObjects.json"))
+
+}
+
+
+```
+
+That is your environment set up. All your input data and results will be there.
+
+## b. Open the Biigle reports and aggregate them
+
+**Note:** that this will ignore images with no labels
+
+```{r}
+
+# 1) List the csv tables - these maybe in .csv or .zip format          ----------------------------------------------------------------------------
+list.files(reportsFolder, pattern = "csv_image_label_report") -> files
+#Nils: is this pattern standard output from biigle? If not think we should add UPDATE to prompt user
+
+if (length(files)==0) {
+  stop("No relevant files recognised in your reports_folder: ", reportsFolder)
+}
+
+# 2) Make a metadata table --------------------------------------------------------------------------------
+
+tibble(file = files ) %>%
+  mutate(table_name = str_remove(file,pattern = ".zip")) %>% 
+  # Make a column of volume ID number
+  mutate(volume = str_remove(table_name,pattern = "csv_image_label_report") ) -> labelsTable
+ 
+# Make a list to store all transformed tables tables
+dFrames  <- as.list(1:nrow(labelsTable))
+
+for (i in seq(dFrames)) {
+  # Select the table number i
+  labelsTable %>% slice(i) -> meta.i
+  # Import it
+  meta.i %>% pull(file ) %>% paste(reportsFolder,.,sep = "/") %>%
+    read_csv(col_types = cols()) -> D.i
+
+  # Add the metadata 
+ bind_cols( D.i,meta.i) ->  dFrames[[i]]
+
+}
+
+# This is your table of everything 
+dFrames %>% bind_rows() -> allLabels
+
+
+# Show a list of labels
+allLabels %>% count(label_name) %>% arrange(desc(n)) %>%  print()
+
+
+```
+
+Print all the labels so you can see what classes (i.e. species) Yolo will learn to detect.
+
+```{r}
+# Make a string of lables
+distinct(allLabels, label_name) %>% pull(label_name) %>%paste(collapse ="' , '") %>%  paste0("  '", ., "'  ")
+```
+
+Any filtering and changes to the labels needed before proceeding?
+
+```{r}
+
+labelsToKeep <- c( 'NoGear' , 'Gear' )
+# labelsTodelete <- c( 'Not Useable' )
+
+# Filter the labels 
+allLabels %<>% filter(label_name %in% labelsToKeep)
+
+
+# Change labels to shorter names? 
+#Nils: this feels unfinished? is this just meant to be uses as a filter like labelsToKeep?
+# yolo_label_names <- c()
+
+
+
+```
+
+## c. View labels and change if necessary
+
+```{r}
+
+# Make a list of labels you want to take to train your model on
+tibble(label_name = allLabels %>% distinct(label_name) %>%  pull) -> allLabelNames
+
+# Make a new column of better names (rather than the Biigle catalogues names)
+allLabelNames %<>% mutate( Yolo_labelNames = label_name %>%  as.factor() )
+
+# Add a class code - a numerical code that will be used by yolo instead of the text labels (a.k.a. one-hot encoding)
+allLabelNames %<>%  mutate( class_code = 0:(nrow(allLabelNames) -1 ))
+
+# Add a column of abundance of each label in your dataset
+allLabels %>% count(label_name) %>%
+  left_join(allLabelNames, by = "label_name") %>% arrange(class_code) -> allLabelNames
+
+# View you final table
+print(allLabelNames)
+
+# Make the class sorted images folder
+if (dir.exists(sortedImagesDir)== FALSE){
+  dir.create(sortedImagesDir)
+  }  
+
+# Export the labels as a classes.txt file
+allLabelNames %>% select(label_name) %>% 
+  write_csv(file = paste0(sortedImagesDir,"/classes.txt"),col_names = FALSE)
+
+
+
+ 
+```
+
+## d. Have a look at the final class count
+
+Ideally you want as balanced a training set as possible and a validation set with the same prevalence of each class. In practice, you will most likely not have any of that but you should be aware of that bias in your dataset.
+
+```{r}
+allLabels %>%  
+  ggplot(aes(label_name, fill = label_name)) +
+  geom_bar() + 
+  theme_bw() +
+  scale_fill_brewer(palette="Dark2", name = "Label names:") + 
+  labs(y = "Number of unique occurences",
+       x = "Label names",
+       title = "Number of annotations per label names",
+       caption = "This is how many examples of each class your YOLO model will be trained on")
+```
+
+## e. Get the actual images from your computer
+
+Before images can be moved to a specific folder along with the annotations, R needs to know where they are i.e. the image file paths.
+
+This code looks into the image folder directory and makes a table of images and their respective pathways. Note that zipped folders will be unzipped.
+
+```{r}
+
+#Nils why create another variable here? why not just use local_images_dir in code below?
+
+# 1) Create table       ----------------------------------------------------------------------------
+imagesDir <- localImagesDir 
+
+# Get a list of all ZIP files in the directory
+zipFiles <- list.files(path = imagesDir, pattern = "\\.zip$", full.names = T)
+
+if (length(zipFiles)>0) {
+    # Unzip each ZIP file
+  for (zipFile in zipFiles) {
+    unzip(zipFile, exdir = imagesDir)
+  }
+}
+
+# make a table of images and path to each of them (discounting any zip files that may be present)
+imagesDir %>%  list.files(recursive = T, full.names = T)  %>% .[! . %in% zipFiles] -> imgsPaths
+
+
+# imgsList <- paste0(basename(dirname(imgsPaths)),"/",basename(imgsPaths))
+
+# imgs_list %>%  str_split(pattern = "/") %>%
+#   map(~ extract2(.x, length(.x))) %>%
+#   unlist() -> imgs_names
+
+imgsPaths %>% basename -> imgsNames
+
+# #Nils do you plan to put folder "ALL_IMAGES" ON github? Just wondering if we really need multiple columns for variations of image file paths. Why not just have full path separate when needed. 
+
+
+# Format the table
+tibble(path = imgsPaths,
+       filename = imgsNames) -> imgPathways
+
+
+
+# 2) Add the pathways to the images ----------------------------------------------------------------------------
+
+# Merge it with the the image metadata including the path and dimensions
+imgPathways%>%  left_join(allLabels, . , by = "filename" ) %>% distinct(image_label_id, .keep_all = T) -> allLabelsPath
+
+# Make sure all images are matched to their pathways
+allLabelsPath %>% filter(is.na(path)) -> mismatched # 
+
+# Highlight any images in the biigle report that have not been found
+if(nrow(mismatched) == 0){
+  print_color(color = "green", text = "All images have been found - proceed")
+}else{
+  print_color(color = "red", text = paste0("Warning: ", nrow(mismatched %>% distinct(filename)), " label(s) have not been matched to an image (out of ", nrow(allLabelsPath %>% distinct(filename) ),") \n"))
+  print_color(color = "red", text = paste0("Number of labels=",nrow(allLabels), ", Number of images=", nrow(imgPathways), "\n\n"))
+  print_color(color = "red", text = paste0("First 5 Mismatched images are: ", mismatched %>%  distinct(filename) %>% head(5)))
+
+}
+
+
+# NOTE: if you want to know what the mismatches are, call the mismatched table (below)
+# mismatched
+
+
+```
+
+If all images have been found then you are clear to proceed. If not, try to see why some images are not found in the directory. Often there might be a discrepancy in the names, the date can be written wrong or the the format is different (i.e. .jpg on Biigle but .png on your machine).
+
+## f. Make the structure for your dataset and move images
+
+### Create a subfolder for each label
+
+```{r}
+
+# List the folders 
+labelsFolderPaths <- paste0(sortedImagesDir,"/", allLabelNames %>% pull(label_name))
+
+
+for (i in seq(labelsFolderPaths)) {
+  
+  allLabelNames %>% slice(i) -> label.i
+  
+  
+  # Create the folders
+  labeldir.i <- paste0(sortedImagesDir,"/", label.i$label_name)
+  if (dir.exists(labeldir.i) == FALSE){
+    dir.create(labeldir.i)
+    
+   
+    allLabelsPath %>% filter(label_name == label.i$label_name) -> labels.i
+    
+      print_color(color = "blue", text = paste0("'",label.i$label_name, "' moving ", 
+                                                nrow(labels.i), " images \n"))
+  
+    
+    for (ii in 1:nrow(labels.i)) {
+      
+      labels.i %>% slice(ii) -> d.ii
+      
+      
+      # Move the images
+      file.copy(from = d.ii$path,
+                       to = paste0(sortedImagesDir,"/",
+                                   label.i$label_name,"/"
+                                   ,d.ii$filename), overwrite = T)
+      
+    }
+    
+  }
+
+  else{
+    
+    print_color(color = "red", text = paste0("'",label.i$label_name, "' images already moved \n"))
+  }
+
+      
+}
+
+
+```
+
+### Split between training and testing sets
+
+This will first check if you already have a formatted dataset in that folder. If so, it will stop running to avoid repeating the random split and risk copying images in both training and testing.
+
+if you want to re-run the split, just manually delete the "V8_dataset" folder in your directory
+
+**Note:** This step can quite slow if you are working on a slow drive. Also it will duplicate your images into a new folder which will require the same amount of disk space.
+
+```{r}
+
+# Make a dataset folder
+if(!dir.exists(v8Dir) ){
+dir.create(v8Dir)  
+
+
+# List of labels
+labels <- list.dirs(sortedImagesDir,recursive = F, full.names = F)
+
+# Data set folder name not a label
+labels %<>% str_subset(pattern = "V8_dataset",negate = T)
+
+# Yolo folder not a label
+labels %<>% str_subset(pattern = "yolo",negate = T)
+
+# Make train and test folders
+train <- paste0( v8Dir , "/train" )
+dir.create(train)
+# Make directory for each labels 
+for (label in labels) {
+  dir.create(paste0(train,"/",label))
+  
+}
+
+# Same for test set
+test <- paste0( v8Dir , "/test" ) 
+dir.create(test)
+for (label in labels) {
+  dir.create(paste0(test,"/",label))
+}
+
+# Send 25% of images in test folder the rest in train
+imagesMeta <- as.list(labels)
+names(imagesMeta) <- labels
+
+for(label in labels){
+  labImgs <- list.files(paste0(sortedImagesDir,"/",label),pattern = ".jpg$")
+  
+  # Do the 25-75% split to make a test/validation set
+  labImgsIrain <- labImgs %>% sample(length(.)*0.75)
+   
+  labImgsTest <- setdiff( labImgs, labImgsTrain)
+  
+  bind_rows(tibble(filename = labImgsTrain, set = "train"),tibble(filename = labImgsTest, set = "test") ) %>% mutate(label = label) -> imagesMeta[[label]]
+  
+  print_color(color = "green", text = paste0( "moving '",label ,"' images to Test folder\n"))
+  for(image in labImgsTest){
+    file.copy(from = paste0(sortedImagesDir,"/",label,"/",image),
+                to = paste0(test,"/",label))
+      }
+ 
+    print_color(color = "green", text = paste0( "moving '",label ,"' images to Train folder\n"))
+  for(image in  labImgsTrain){
+    file.copy(from = paste0(sortedImagesDir,"/",label,"/",image),
+              to = paste0(train,"/",label))
+      }
+   
+  
+}
+
+imagesMeta %<>% bind_rows() %>%
+  mutate(path = paste0(sortedImagesDir,"/",label)) %>% 
+  select(filename,path,label,set)
+
+imagesMeta %>% write_csv(paste0(sortedImagesDir,"/Image_metadata.csv"))
+
+}else{  
+  
+  stop("Dataset directory already exists!!\n") 
+}
+
+
+
+
+```
+
+Once this is done, keep the original images.
+
+## g. Make a summary table of the number of images per label
+
+```{r}
+
+paste0(sortedImagesDir,"/Image_metadata.csv") %>%  read_csv() -> imagesMeta
+
+imagesMeta %>% count(set, label) %>%
+  mutate(color_pal = case_when(
+    str_detect(set, "test") ~ "#FF3B28",
+    str_detect(set, "train") ~ "#006FEF" 
+  )) %>% 
+reactable(
+  .,
+  defaultColDef = colDef(
+    cell = data_bars(.,
+                     fill_color_ref = "color_pal",
+                     border_style = "solid",
+                     border_color = "gold", 
+                     text_position = "outside-end")
+  ),
+  columns = list(color_pal = colDef(show = FALSE) ) # Hide the color_pal column
+)
+
+
+```
+
+**Note:** You can re-arrange the tables display by clicking on the column names
+
+# 3) Train the Yolo model
+
+If you have a local python ultralytics installation you can use it from here.
+
+Visit: <https://docs.ultralytics.com/quickstart/#install>
+
+1\) Create a new [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html) environment named 'YoloV8'. Then "pip install ultralytics" to use YOLO and "pip install CUDA-torch" to be able to use your (CUDA-enabled) GPU (see [pytorch](https://pytorch.org/get-started/locally/)) for more efficient computing (I know, it is getting complicated... ).
+
+2\) Set the python interpreter in R to this conda environment (Tools \> Global Options \> Python).
+
+<!--# Nils i dont really understand the sentence below so re-worded in two points above. Let me know what you think -->
+
+//so that Rstudio can run this YOLO-enabled python that runs [pytorch](https://pytorch.org/get-started/locally/), preferably with CUDA (I know, it is getting complicated... ).//
+
+**Note:** It is a lot simpler to run it in a [Google Colab](https://colab.research.google.com/) environment but this comes with other problems.
+
+3\) You must set the WD. Python will download the weights (.pt file) of the base models that you are about to re-train in your WD. It will also create a bunch more folders where it stores models and predictions.
+
+**Note:** Rstudio/Markdown is picky and things are less likely to go wrong if you train directly into a python interpreter like [Jupyter](https://jupyter.org/install), [Pycharm](https://www.jetbrains.com/pycharm/) or [Visual Studio Code](https://code.visualstudio.com/) (each of these also support R).
+
+```{python}
+
+import glob
+import os
+from ultralytics import YOLO
+
+#TODO make requirements file for all the required packages
+
+# UPDATE THE FOLLOWING:
+
+# Set path to folder where the script is 
+wd = "C:\\Users\\chgam8840\\OneDrive - University of Bergen\\Repos\\Benthic-Images-CV/Classify/GearInVideo"
+
+# Set whether you are using R studio
+usingRStudio = False
+
+#--------------------
+
+# If not using R studio, you need to reload the R variables from the JSON you created earlier.
+
+
+if usingRStudio == False:
+
+  import json
+  from typing import Dict, Any
+
+  class JsonObject:
+      def __init__(self, **kwargs: Any) -> None:
+          """
+          Initialize the object with key-value pairs.
+          The keys should match the attributes of the class.
+          """
+          for key, value in kwargs.items():
+                # Check if the data is a list with one item
+              if isinstance(value, list) and len(value) == 1:
+                  # Extract the single item from the list
+                  value = value[0]
+              setattr(self, key, value)
+
+      @classmethod
+      def from_json_file(cls, file_path: str) -> 'JsonObject':
+          """
+          Load JSON data from a file and create an instance of the class.
+          """
+          with open(file_path, 'r') as file:
+              data = json.load(file)
+                  
+              # Create an instance of the class with the loaded data
+              return cls(**data)
+
+      def __repr__(self) -> str:
+          """
+          Provide a string representation of the object.
+          """
+          return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in self.__dict__.items())})"
+
+
+  # Create an instance of JsonObject from the JSON file
+  json_file_path = f"{wd}//rObjects.json"
+  r = JsonObject.from_json_file(json_file_path)
+
+  # Access the attributes
+  # print(r.yoloDir) 
+
+  # Print the object
+  # print(r) 
+
+
+
+# Set WD
+os.chdir(r.yoloDir)
+
+# Load the model.
+model = YOLO('yolov8n-cls.pt') # reload the base model each time you want to train
+
+
+```
+
+This should have loaded the python libraries and downloaded a basic YOLO model. This step should tell if the modules are correctly set-up.
+
+So, on to model training now.
+
+The parameters here are almost certainly not the best ones and very dependent on your set.
+
+<!--# YOLO QUESTION: WHY DOES IT NEED A NUMBER OF WORKERS????  -->
+
+<!--# The code below requires you to do the previous r steps - so i just made a change in case you want to just start from here?   -->
+
+```{python}
+import glob
+import os
+from ultralytics import YOLO
+
+
+# Set WD
+os.chdir(r.yoloDir)
+
+# Load the model. Keep in mind that larger models will be more demanding in resources
+model = YOLO('yolov8m-cls.pt')  # reload the base model each time you want to train
+
+#TODO: look into custom dataloaders for cross validation where we dont need to make new directories OR https://docs.ultralytics.com/guides/kfold-cross-validation/#how-do-i-implement-k-fold-cross-validation-using-ultralytics-yolo
+
+
+# Train model
+results = model.train(data=r.v8Dir,
+            epochs=10, # the higher the longer training will take. Start low (10 to have an idea) 
+            imgsz=244,  # resize images in training. multiples of 64
+            batch = 8, # adjust depending on how many images you have. This is the number of images considered at a time in trainig
+            workers = 0, # without it, Rstudio gets stuck... 
+            name = "train") # where the files will be created. There will he a folder named yolo in your WD
+
+# Save path to model
+bestWeights = model.model.pt_path
+
+
+if usingRStudio == False:
+  # Serializing json
+  json_object = json.dumps({"bestWeights": os.path.abspath(model.model.pt_path), "modelDir": os.path.abspath(str(model.trainer.save_dir))}, indent=4)
+  
+  # Writing to sample.json
+  with open(f"{wd}/pObjects.json", "w") as file:
+      file.write(json_object)
+
+
+##TO DO : 
+
+#add in validation data, looks like YOLO may be validating on test datasets if a validation set is not provided
+
+```
+
+If you check in '\[Your WD\]/yolo/runs/classify' folder, you will see a lot more info on performances.
+
+Yolo saves the models iteratively so if you train several models they will accumulate in your 'yolo' folder sequentially (it adds numbers at the end of the folder name).
+
+```{r}
+
+# Load the python object: model.predictor.save_dir in R and extract where the last model was saved and the best weights
+if (usingRStudio == FALSE) {
+  py <- read_json(paste0(wd, "/pObjects.json"))
+  bestWeights <- py$bestWeights
+  modelDir <- py$modelDir
+}
+else {
+  bestWeights <- py$model$model$pt_path
+  modelDir <- paste0(yoloDir,"/",py$model$trainer$save_dir)
+
+ }
+
+# Set it up manually
+# paste(wd,"yolo","cidaris_yolo2",sep = "/")
+# str_remove(best_weights,pattern = "weights\\best.pt")
+
+# Doesnt work in VS code
+# Print the Yolo plot of the F1 score
+knitr::include_graphics(paste0(modelDir,"/confusion_matrix_normalized.png" ))
+
+```
+
+This plot shows how the F1 score changes with different confidence thresholds. That should help you decide if you want to change the default (0.25) for your predictions later.
+
+<!--# Nils i assume you mean training/test partition here? -->
+
+Now that you have your model you can make new predictions on images and videos.
+
+# 4) YOLO predictions on images
+
+If you supply a folder full of images, YOLO will handle the rest. There are more parameters that can be set for better results.
+
+**Note:** You can easily spend a lot of time optimizing the model and it may result in a performance gain but the best way to improve performances is by improving annotations with:
+
+\- better fitted bounding boxes\
+- more representative annotations\
+- more representative background\
+- more data sometimes helps, but this has diminishing returns
+
+When training, yoloV8 saves the weights of the last epoch ("weights/last.pt") and the one that had the best performances ("best.pt") (based on IoU?? ). By default we will go with that model to make predictions.
+
+<!--# Nils I think since this is classification  it will select the best model based on the loss. Also below i had to add full path, it wouldnt find my weights file even with os.chdir. Havent done it yet, but generally need to sort filepaths throughtout this document so that you can do sections separately -->
+
+```{python}
+
+# Import the libraries in case you jumped straight to this part
+import os
+import glob
+import pathlib
+import pandas as pd
+import shutil
+from ultralytics import YOLO 
+
+
+
+# UPDATE THE FOLLOWING:
+
+# Set path to folder where the script is 
+wd = "C:\\Users\\chgam8840\\OneDrive - University of Bergen\\Repos\\Benthic-Images-CV/Classify/GearInVideo"
+
+# Set whether you are using R studio
+usingRStudio = False
+
+#--------------------
+
+# If not using R studio, you need to reload the R variables from the JSON you created earlier.
+
+
+if usingRStudio == False:
+
+  import json
+  from typing import Dict, Any
+
+  class JsonObject:
+      def __init__(self, **kwargs: Any) -> None:
+          """
+          Initialize the object with key-value pairs.
+          The keys should match the attributes of the class.
+          """
+          for key, value in kwargs.items():
+                # Check if the data is a list with one item
+              if isinstance(value, list) and len(value) == 1:
+                  # Extract the single item from the list
+                  value = value[0]
+              setattr(self, key, value)
+
+      @classmethod
+      def from_json_file(cls, file_path: str) -> 'JsonObject':
+          """
+          Load JSON data from a file and create an instance of the class.
+          """
+          with open(file_path, 'r') as file:
+              data = json.load(file)
+                  
+              # Create an instance of the class with the loaded data
+              return cls(**data)
+
+      def __repr__(self) -> str:
+          """
+          Provide a string representation of the object.
+          """
+          return f"{self.__class__.__name__}({', '.join(f'{k}={v!r}' for k, v in self.__dict__.items())})"
+
+
+  # Create an instance of JsonObject from the JSON file
+  json_file_path = f"{wd}//rObjects.json"
+  r = JsonObject.from_json_file(json_file_path)
+
+  # Access the attributes
+  # print(r.yoloDir) 
+
+  # Print the object
+  # print(r) 
+
+
+
+# Set WD (again in case you jumped straight here)
+os.chdir(r.yoloDir)
+
+# Load yolo model 
+
+# By default it uses the last model you train
+if 'bestWeights' in globals(): 
+    print("Making predictions with " + bestWeights)
+    model = YOLO(os.path.join(r.yoloDir, bestWeights))
+else: 
+    stop("No Best weights in environment. Supply one first")
+
+# OR you can can manually set a path to a given weights file like:
+
+# bestWeights = r.yoloDir + "/runs/classify/GearInVideo_yoloClass/weights/best.pt" # it can use the path relative to the WD
+  
+
+# Find the testing images in the dataset you just created
+images = glob.glob(r.v8Dir + "/test/*/**.jpg")
+
+# Or submit another folder of images
+# images = glob.glob(dir + "/*.jpg") # !! you can change extension to .png here
+
+
+# Images need to be in one folder, if you pass separate arguments it will create a folder for each
+# Copy to new folder
+
+
+# Create the destination directory if it doesn't exist
+if not os.path.exists(f"{r.sortedImagesDir}/temp"):
+    os.makedirs(f"{r.sortedImagesDir}/temp")
+
+for image in images:    
+    shutil.copy(image, f"{r.sortedImagesDir}/temp/{image.split("\\")[-1]}")
+
+
+results = model(f"{r.sortedImagesDir}/temp",
+    save=False, # Save the images with the predictions on it
+    imgsz=244, # Set same size as in your training 
+    # Save the results to txt files
+    save_txt = True, 
+    save_conf = True,
+    name= "predict")
+
+
+# Remove unnecessary folder
+if os.path.isdir(f"{r.sortedImagesDir}/temp"):
+    shutil.rmtree(f"{r.sortedImagesDir}/temp")
+
+
+# Save the path to the predictions folders
+predictionsDir = str(model.predictor.save_dir)
+
+# Add to python object json (if not using R studio)
+if usingRStudio == False:
+
+  with open(f"{wd}/pObjects.json", 'r+') as file:
+      json_data = json.load(file)
+      json_data['predictionsDir'] = predictionsDir
+      json.dump(json_data, file, indent=4)
+
+
+# Get predicted labels
+filenames = os.listdir(f"{os.path.abspath(predictionsDir)}/labels")
+
+# Save the labels 
+labelsDict= {name:id for id, name in model.names.items()}
+
+
+# Load predicted labels and get max scoring classes
+labels = []
+for f in filenames:
+    label = pd.read_csv(f"{os.path.abspath(predictionsDir)}/labels/{f}", header=None, sep=" ")    
+    labels.append(pd.DataFrame([f] + list(label.max()))
+.T)
+    
+# Concat, add columns and get one-hot encoded class labels
+labels = pd.concat(labels)
+labels.columns=['filename', 'score','label']
+
+# Check if label is already one-hot encoded/numeric
+if pd.api.types.is_numeric_dtype(labels.label):
+    labels.insert(2, "class", [labelsDict[str(int(l))] for l in labels.label], True)
+else:
+    labels.insert(2, "class", [labelsDict[l] for l in labels.label], True)
+
+# Export to single spreadsheet
+labels.to_csv(f"{os.path.abspath(predictionsDir)}/labels.csv", index=False, header=True)
+
+
+
+```
+
+## a. Images annotations as .txt files
+
+Now that you have your predictions as .txt files for each image, you may want to put them back into a single spreadsheet for easier management or upload into an annotation software.
+
+```{r must convert from python}
+
+# load the labels 
+
+# get the prediction directory - - - - - - - - - - - - - - - - - - - - - - - - -  
+
+# from the loaded model
+predictions_dir <- py$predictions_dir
+
+# or put it here manually 
+# predictions_dir <- "runs/classify/GearInVideo_class_predictions"
+
+# get the class names from the model that made the predictions  - - - - - - - - 
+
+# Load the labels from the Yolo models or with the table saved as predictions
+if( exists('py$model') ){
+  print_color(color = "br_green", text = paste0( "Getting labels from YOLO model\n"))
+  labels <- py$model$names %>%
+    unlist() %>%
+    as.data.frame() %>%
+    rownames_to_column() %>% 
+    set_names(c('class','label_name'))
+  
+}else if(file.exists(paste0(sortedImagesDir,"/labels.csv"))){
+  print_color(color = "br_green", text = paste0( "Getting labels from table\n"))
+    # This kind work to interrupt the code if a split alread exists
+}else{
+  print_color(color = "br_red", text = paste0( "No labels found, supply a table or YOLO model\n"))
+}
+ 
+
+# open all the labels txt - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+txts_dir <- paste0(yolo_dir,"/",predictions_dir,"/labels") 
+labels_txt <- txts_dir %>% list.files()
+  
+  labels <- as.list(labels_txt)
+  names(labels) <- labels_txt # %>%  str_sub(end = -5)
+  
+  for (txt in labels_txt){
+    
+    txt %>% 
+      paste0(txts_dir,"/",.) %>% read_table(col_names = F,col_types = cols()) %>% 
+      set_names(c("score","label_name")) %>%
+      # add the name of the image (ignore extension for now)
+      mutate(filename = str_sub(txt,end = -5))  -> d.i
+    
+  # add the winning class columns 
+  d.i %>% arrange(score %>% desc) %>% slice(1) %>% pull(label_name) -> win
+  d.i %<>% mutate( prediction = win )
+  
+  labels[[txt]] <- d.i
+    
+  }
+  
+  labels_table <- labels %>%  bind_rows()
+  
+  
+  
+  # pivot so that each label has a column
+  # resulting table is stacked so it must be flattened
+  labels_table %<>% pivot_wider(id_cols = c("filename","prediction"),names_from = "label_name",values_from = score)
+  
+  
+  # export to dataset
+  labels_table %>%
+    write_csv(paste0(yolo_dir,"/",predictions_dir,"/",basename(predictions_dir) ,".csv"))
+  
+
+```
+
+Quick visualization with tools used for other modeling methods like sdm
+
+```{r}
+
+paste0(yolo_dir,"/",predictions_dir,"/",basename(predictions_dir) ,".csv") %>% read_csv() -> labels_table
+
+# the relative prevalence of the different labels 
+labels_table %>% 
+  ggplot( aes(x=factor(prediction   ))) +
+  geom_bar(stat="count", width=0.7, fill="steelblue")+
+  theme_minimal() +
+  theme_bw() + 
+  labs(y = "Number of unique annotations",
+       x = "Labels names",
+       title = "Prevalence of each labels in predictions",
+       caption = "This is how many examples of each species your YOLO model will be          trained on")
+
+```
+
+make a confusion matrix and view it
+
+This should tell you the same stoy that the YOLO train log but here you have a bit more control on the evaluation process and you can see how the results can be accessed and used like in other modelling with R.
+
+You can use the test images that are readily available but this is not the most objective evaluation. If you have another set of labels, load the tabel with the "filename" and "label" columns to compare with the predictions you just made
+
+```{r}
+
+
+paste0(yolo_dir,"/",predictions_dir,"/",basename(predictions_dir) ,".csv") %>% read_csv() %>% 
+  mutate(filename = paste0(filename,".jpg")) %>%
+  left_join(images_meta, by = join_by(filename)) -> CNN_eval
+  
+# view the confusion matrix from Caret
+# Confusion Matrix
+cf <- caret::confusionMatrix(data=as.factor(CNN_eval$prediction),
+                             reference=as.factor( CNN_eval$label))
+print(cf)
+  
+```
+
+have a look at the matrix
+
+```{r}
+
+
+# Evaluate predictions and create confusion matrix
+eval <- cvms::evaluate(
+  data = CNN_eval,
+  target_col = "label",
+  prediction_cols = "prediction",
+  type = "binomial"
+)
+
+p <- plot_confusion_matrix(eval)
+
+
+# show plot
+print(p)
+
+```
+
+# 5) YOLO predictions on a video
+
+The same model can also make predictions on videos. More precisely, it can make predictions on each frame of the video. The output is a predictions for each of those frames as a single txt file. They are whiten down as txt files named by frame number in the video (elapsed number of seconds x FPS)
+
+A prediction for each frame has limited use since it doesn't tell you if detection on successive frames are the same individuals. YoloV8 implements a tracking algorithm to do just that. In practice it adds a column for the ID of each individual objects.
+
+**NOTE:** This is a slow process.
+
+!!!! THIS MAY NEED UPDATED ULTRALYTICS !!!!
+
+```{python}
+
+# import the libraries in case you jumped straight to this part
+import os
+import glob
+import pathlib
+import pandas as pd
+from ultralytics import YOLO 
+
+# set WD (again in case you jumped straight here)
+os.chdir(r.yolo_dir)
+
+# load yolo model 
+
+# By default it uses the last model you train
+# you can can manually set a path to a given weights file like:
+# it can use the path relative to the WD
+best_weights = r.yolo_dir + "/runs/classify/GearInVideo_yoloClass/weights/best.pt"
+
+
+# you can take the 
+  if 'best_weights' in globals(): 
+      print("Making predictions with " + best_weights)
+      model = YOLO(best_weights) 
+  else: 
+      print ("No Best Weights in environement. Supply one first")
+    
+
+# make detections from a model with multiple deflector class but only for stychopus
+source_video = "C:/Users/a40754/Documents/temp/gearinoutTest - Copy.mp4"
+
+# for simple predictions in the video
+# for results in model.predict(source=source_video,
+# if stream not enabled, memory runs out for long videos
+for results in model.predict(source=source_video,                          save_txt=True ,save=True, save_conf = True,stream=True, name = r.projectName + " - " + os.path.basename(model.predictor.save_dir.with_suffix('')) + "_class"):
+  pass
+
+# when you make a prediction you can get the results with
+results.probs
+results.names
+
+# this will tell you where your predictions are and you can copy it 
+print(f"results will be in the latest {pathlib.Path(model.predictor.save_dir) }")
+
+# save the path to the detections folders
+predictions_dir = pathlib.PureWindowsPath(str(model.predictor.save_dir)).as_posix()
+
+# save the labels 
+labels_table = model.names
+
+label_names = pd.DataFrame(model.names.items(), columns=['class','label_name'])
+label_names.to_csv(r.dir + "/" + "labels.csv")
+
+
+
+```
+
+## a. Video predictions processing
+
+This takes the txt files made by YOLO into a table that can be viewed in excel
+
+Note here that videos have a large number of frames so a 5 min video at 25 fps makes for a lot of label files ( 5 \* 60 \* 25 = 7.5K). R is quite slow for this sort of operation so beware that for long videos this will be an issue
+
+```{r}
+
+# get the prediction directory - - - - - - - - - - - - - - - - - - - - - - - - -  
+
+
+# from the loaded model
+predictions_dir <- py$predictions_dir
+
+# or put it here manually 
+predictions_dir <- "runs/classify/GearInVideo - gearinoutTest - Copy.mp4_class"
+
+# load the labels 
+if( exists('py$model') ){
+  # get the class names from the model that made the predictions
+  print_color(color = "br_green", text = paste0( "Getting labels from YOLO model\n"))
+  labels <- py$model$names %>%
+    unlist() %>%
+    as.data.frame() %>%
+    rownames_to_column() %>% 
+    set_names(c('class','label_name'))
+  
+}else if(file.exists(paste0(dir,"/labels.csv"))){
+  # or load the table made during predictions
+  print_color(color = "br_green", text = paste0( "Getting labels from table\n"))
+    # This kind work to interrupt the code if a split alread exists
+}else{
+  print_color(color = "br_red", text = paste0( "No labels found, supply a table or YOLO model\n"))
+}
+
+
+# ======================================================================
+
+# open all the labels txt
+txts_dir <- paste0(yolo_dir,"/",predictions_dir,"/labels") 
+labels_txt <- txts_dir %>% list.files()
+
+labels = pd.DataFrame()
+# txt = labels_txt[12000]
+for txt in labels_txt:
+  print(txt)
+# open the label txt
+df = pd.read_csv(txt, header=None, sep=' ')
+df.columns = ["score","class"]
+v = os.path.basename(txt)
+df['filename'] = v
+df['frame'] = v.replace(".txt", "").split("_")[-1]
+df['prediction'] = df.loc[df['score'].idxmax()]['class']
+labels = pd.concat([labels, df])
+
+
+# open all the labels txt - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+labels <- as.list(labels_txt)
+names(labels) <- labels_txt # %>%  str_sub(end = -5)
+
+print("this might take a while, please holf")
+for (txt in labels_txt){
+  
+  txt %>% 
+    paste0(txts_dir,"/",.) %>% read_table(col_names = F,col_types = cols()) %>% 
+    set_names(c("score","label_name")) %>%
+    # add the name of the image (ignore extension for now)
+    mutate(filename = str_sub(txt,end = -5), 
+           # get the frame number from the filename
+           frame = filename %>% str_remove(".txt") %>%
+             str_split("_") %>%
+             extract2(1) %>%
+             extract(2) %>%
+             as.numeric()
+           )  -> d.i
+  
+  # add the winning class columns 
+  d.i %>% arrange(score %>% desc) %>% slice(1) %>% pull(label_name) -> win
+  d.i %<>% mutate( prediction = win )
+  
+  labels[[txt]] <- d.i
+  
+}
+
+labels_table <- labels %>%  bind_rows() %>%  arrange(frame)
+
+
+# pivot so that each label has a column
+# resulting table is stacked so it must be flattened
+labels_table %<>% pivot_wider(id_cols = c("filename","frame","prediction"),names_from = "label_name",values_from = score)
+
+# export to dataset
+labels2.to_csv( predictions_dir + "/" + os.path.basename(ori_video).replace(".mp4","") + "_classified.csv",index =False)
+
+# export to dataset
+labels_table %>%
+  write_csv(paste0(yolo_dir,"/",predictions_dir,"/",basename(predictions_dir) ,".csv"))
+
+```
+
+## b. Plot video classification as time series
+
+```{r}
+
+# this has the detection for each frame
+  paste0(yolo_dir,"/",predictions_dir,"/",basename(predictions_dir) ,".csv") %>% 
+  read_csv() %>%   arrange(frame) -> d
+  
+
+# add video desciptors. Classification output has a txt for every frame so the nb of files is the nb of frames
+total_vid_length <- nrow(d)
+# the video fps, 
+vid_fps <- 25
+
+# make a time in sec column
+d %<>% mutate(sec = (as.numeric(frame) / vid_fps) %>% seconds() ) %>% 
+  mutate(round_sec = floor(sec)) %>% 
+# make a time hms column 
+  mutate(Time =strftime(as.POSIXct("00:00:00", format="%H:%M:%S") + sec, format="%H:%M:%S") )   
+
+
+# make a table of minutes in video for a better plot of the time series
+d %>% 
+  select(frame,sec,Time) %>% distinct(Time, .keep_all = T) %>% 
+  mutate(time_minutes = sec %>% seconds_to_period() %>%  minute()) %>% distinct(time_minutes,.keep_all = T)  -> df
+ 
+
+
+# Plot a time time series with a row for each frame  
+d %>%
+  pivot_longer(cols = c("in","out") , names_to = "label", values_to = "score") %>% 
+  ggplot(aes(x = round_sec, y = score, col = label)) +
+  geom_line() + 
+  # add dots of the winning class
+  geom_point(aes(x = round_sec, y = 1, col = prediction)) + 
+  theme_bw() +
+  ylab("Number of detections in a single frame")  -> g
+
+g + 
+  scale_x_continuous(breaks= df$sec, labels=df$Time ) +
+  theme(axis.text.x=element_text(angle=45, vjust=.5))
+
+
+
+!!!!  add text at  y = 1 to say it is the dominant class 
+
+
+```
