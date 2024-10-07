@@ -15,14 +15,15 @@
 <h3>Training details</h3>
 
 <p>
-    "model_version": "saved_models\\yolov8n-cls.pt"
-    "batchsz": 32
-    "epochs": 50 (Default no. epochs)
-    "imgsz": 256
-    "patience": 5 (Early stopping if performance not improved over 5 Epochs)
-    "kfolds": 4
-
-add datasets sizes
+    "model_version": "yolov8n-cls.pt"  <b>
+    "batchsz": 32 </b>
+    "epochs": 50 (Default no. epochs) </b>
+    "imgsz": 256 </b>
+    "patience": 5 (Early stopping if performance not improved over 5 Epochs) </b>
+    "kfolds": 4 </b>
+    "train_prop": 0.8 </b>
+    "datasetsz": 600 (Total no. images) </b>
+    
 </p>
 
 
@@ -53,7 +54,7 @@ Confusion matrices for each kfold:
 <img src="Test_Confusion_Matrix_K-fold=3_norm.png" height="250" > <b>
 <img src="Test_Confusion_Matrix_K-fold=4_norm.png" height="250" > <b>
 
-    
+
 <h2>Model Depth Comparison</h2>
 
 <img src="YOLO_V8_modDepth.png" height="250" > <b>
