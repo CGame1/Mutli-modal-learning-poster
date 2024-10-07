@@ -21,8 +21,8 @@ Conducted quick k-fold cross-validation.
     "epochs": 50 (Default no. epochs) <br>
     "imgsz": 256 <br>
     "patience": 5 (Early stopping if performance not improved over 5 Epochs) <br>
-    "kfolds": 4 <br> (class-stratified)
-    "train_prop": 0.8 <br> (class-stratified)
+    "kfolds": 4 (class-stratified) <br>
+    "train_prop": 0.8 (class-stratified) <br>
     "datasetsz": 600 (Total no. images) <br>
     
 </p>
@@ -31,7 +31,9 @@ Conducted quick k-fold cross-validation.
 <h3>Results</h3>
 
 <p>
-Prediction confidence scores for each class:<br>
+<b> 
+Prediction confidence scores for each class:
+</b>
 </p>
 
 <img src="YOLO_V8_n_confidence.png" height="250" > <br>
@@ -43,14 +45,18 @@ Prediction confidence scores for each class:<br>
 
 
 <p>
-Mean class performance metrics across k-folds:
+<b>¨
+    Mean class performance metrics across k-folds:
+</b>
 </p>
 
 <img src="YOLO_V8_n_clsmetrics.png" height="250" > <br>
 
 
 <p>
-Confusion matrices for each kfold:
+<b>
+    Confusion matrices for each kfold:
+</b>
 </p>
 
 <img src="Test_Confusion_Matrix_K-fold=1_norm.png" height="250" > <br>
@@ -63,8 +69,11 @@ Confusion matrices for each kfold:
 
 
 <p>
-    Mean k-fold accuracy for each Yolov8 classification architecture:
-</p>
+<b>
+Mean k-fold accuracy for each Yolov8 classification architecture:
+
+</b>
+ </p>
 
 
 
@@ -76,8 +85,11 @@ Confusion matrices for each kfold:
 </p> 
 
 <p>
+<b>
     Mean class performance metrics across k-folds for each model:
-</p>
+
+</b>
+   </p>
 <img src="YOLO_V8_modDepth_clsmetrics.png" height="250">
 
 
