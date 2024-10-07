@@ -7,8 +7,12 @@
 
 <h1>Preliminary Results</h1>
 
-<h2>Quick Yolov8 Classification</h2>
+<h2>Yolov8 Classification</h2>
 
+<p>
+
+Conducted quick k-fold cross-validation.    
+</p>
 <h3>Training details</h3>
 
 <p>
@@ -17,8 +21,8 @@
     "epochs": 50 (Default no. epochs) <br>
     "imgsz": 256 <br>
     "patience": 5 (Early stopping if performance not improved over 5 Epochs) <br>
-    "kfolds": 4 <br>
-    "train_prop": 0.8 <br>
+    "kfolds": 4 <br> (class-stratified)
+    "train_prop": 0.8 <br> (class-stratified)
     "datasetsz": 600 (Total no. images) <br>
     
 </p>
