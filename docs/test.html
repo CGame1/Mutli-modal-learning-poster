@@ -6,11 +6,8 @@
 <body>
 
 <h1>Preliminary Results</h1>
-<p>TBC</p>
 
-
-
-<h2>Quick Classification</h2>
+<h2>Quick Yolov8 Classification</h2>
 
 <h3>Training details</h3>
 
@@ -31,11 +28,14 @@
 
 <p>
 Prediction confidence scores for each class:<br>
-*Classes have been ordered by increasing number of images in training set. 
-
 </p>
 
 <img src="YOLO_V8_n_confidence.png" height="250" > <br>
+
+<p>
+*Classes have been ordered by increasing number of images in training set. 
+
+</p>
 
 
 <p>
@@ -55,10 +55,25 @@ Confusion matrices for each kfold:
 <img src="Test_Confusion_Matrix_K-fold=4_norm.png" height="250" > <br>
 
 
-<h2>Model Depth Comparison</h2>
+<h2>Yolov8 Model Depth Comparison</h2>
+
+
+<p>
+    Mean k-fold accuracy for each Yolov8 classification architecture:
+</p>
+
+
+
 
 <img src="YOLO_V8_modDepth.png" height="250" > <br>
 
+<p>
+    *Models are ordered by increasing depth (number of parameters). More parameters = more complex model.
+</p> 
+
+<p>
+    Mean class performance metrics across k-folds for each model:
+</p>
 <img src="YOLO_V8_modDepth_clsmetrics.png" height="250">
 
 
