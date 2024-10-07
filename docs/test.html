@@ -10,9 +10,53 @@
 
 
 
+<h2>Quick Classification</h2>
+
+<h3>Training details</h3>
+
+<p>
+    "model_version": "saved_models\\yolov8n-cls.pt"
+    "batchsz": 32
+    "epochs": 50 (Default no. epochs)
+    "imgsz": 256
+    "patience": 5 (Early stopping if performance not improved over 5 Epochs)
+    "kfolds": 4
+
+add datasets sizes
+</p>
+
+
+<h3>Results</h3>
+
+<p>
+Prediction confidence scores for each class:<b>
+*Classes have been ordered by increasing number of images in training set. 
+
+</p>
+
+<img src="YOLO_V8_n_confidence.png" height="250" > <b>
+
+
+<p>
+Mean class performance metrics across k-folds:
+</p>
+
+<img src="YOLO_V8_n_clsmetrics.png" height="250" > <b>
+
+
+<p>
+Confusion matrices for each kfold:
+</p>
+
+<img src="Test_Confusion_Matrix_K-fold=1_norm.png" height="250" > <b>
+<img src="Test_Confusion_Matrix_K-fold=2_norm.png" height="250" > <b>
+<img src="Test_Confusion_Matrix_K-fold=3_norm.png" height="250" > <b>
+<img src="Test_Confusion_Matrix_K-fold=4_norm.png" height="250" > <b>
+
+    
 <h2>Model Depth Comparison</h2>
 
-<img src="YOLO_V8_modDepth.png" height="250" >
+<img src="YOLO_V8_modDepth.png" height="250" > <b>
 
 <img src="YOLO_V8_modDepth_clsmetrics.png" height="250">
 
