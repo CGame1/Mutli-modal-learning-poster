@@ -7,11 +7,11 @@
 
 <h1>Preliminary Results</h1>
 
-*This project has only recently begun and still processing data. <br>
+*This project has only recently begun and awaiting data. <br>
 However the following results are based on an open-source dataset with multimodal assigned image labels (biotopes).
 
 
-<h2>Yolov8m Classification</h2>
+<h2>Yolov8 Classification</h2>
 
 <p>
 
@@ -20,12 +20,12 @@ Conducted quick k-fold cross-validation.
 <h3>Training details</h3>
 
 <p>
-    "model_version": "yolov8m-cls.pt"  <br>
+    "model_version": "yolov8n-cls.pt"  <br>
     "batchsz": 32 <br>
     "epochs": 50 (Default no. epochs) <br>
     "imgsz": 256 <br>
     "patience": 5 (Early stopping if performance not improved over 5 Epochs) <br>
-    "kfolds": 5 (class-stratified) <br>
+    "kfolds": 4 (class-stratified) <br>
     "train_prop": 0.8 (class-stratified) <br>
     "datasetsz": 600 (Total no. images) <br>
     
@@ -40,7 +40,7 @@ Prediction confidence scores for each class:
 </b>
 </p>
 
-<img src="mod_confidence.png" height="250" > <br>
+<img src="YOLO_V8_n_confidence.png" height="250" > <br>
 
 <p>
 *Classes have been ordered by increasing number of images in training set. 
@@ -49,15 +49,12 @@ Prediction confidence scores for each class:
 
 
 <p>
-
-Mean Test Accuracy = 0.99 ± 0.007
-
 <b>
     Mean class performance metrics across k-folds:
 </b>
 </p>
 
-<img src="test_metrics.png" height="250" > <br>
+<img src="YOLO_V8_n_clsmetrics.png" height="250" > <br>
 
 
 <p>
@@ -66,13 +63,13 @@ Mean Test Accuracy = 0.99 ± 0.007
 </b>
 </p>
 
-<img src="Test_Confusion_Matrix_K-fold=1.png" height="250" > <br>
-<img src="Test_Confusion_Matrix_K-fold=2.png" height="250" > <br>
-<img src="Test_Confusion_Matrix_K-fold=3.png" height="250" > <br>
-<img src="Test_Confusion_Matrix_K-fold=4.png" height="250" > <br>
-<img src="Test_Confusion_Matrix_K-fold=5.png" height="250" > <br>
+<img src="Test_Confusion_Matrix_K-fold=1_norm.png" height="250" > <br>
+<img src="Test_Confusion_Matrix_K-fold=2_norm.png" height="250" > <br>
+<img src="Test_Confusion_Matrix_K-fold=3_norm.png" height="250" > <br>
+<img src="Test_Confusion_Matrix_K-fold=4_norm.png" height="250" > <br>
 
-<h2>Yolo Model Depth Comparisons</h2>
+
+<h2>Yolov8 Model Depth Comparison</h2>
 
 
 <p>
@@ -85,13 +82,20 @@ Mean k-fold accuracy for each Yolov8 classification architecture:
 
 
 
-<img src="5-fold_mod_compare.png" height="250" > <br>
+<img src="YOLO_V8_modDepth.png" height="250" > <br>
 
 <p>
     *Models are ordered by increasing depth (number of parameters). More parameters = more complex model.
 </p> 
 
 <p>
+<b>
+    Mean class performance metrics across k-folds for each model:
+
+</b>
+   </p>
+<img src="YOLO_V8_modDepth_clsmetrics.png" height="250">
+
 
 </body>
 </html>
