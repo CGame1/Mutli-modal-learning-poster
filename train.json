@@ -1,0 +1,15 @@
+{
+"data_path": "data",
+"save_path": "runs/class_images",
+"img_type": ".png", 
+"kfold": 5,
+"seed": 20,
+"model": "saved_models/yolov8m-cls.pt",
+"batch": 32, 
+"epochs": 50, 
+"imgsz": 256,
+"device": 0,
+"lr0": 0.01,
+"patience": 5,
+"save_period": 3
+}
