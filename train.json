@@ -1,5 +1,5 @@
 {
-"data_path": "data",
+"data_path": "data/class_images",
 "save_path": "runs/class_images",
 "img_type": ".png", 
 "kfold": 5,
