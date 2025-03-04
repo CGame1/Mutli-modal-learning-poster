@@ -1,6 +1,6 @@
 {
-"data_path": "data/class_images",
-"save_path": "runs/class_images",
+"data_path": "shulz_bank/data/class_images",
+"save_path": "shulz_bank/runs/class_images",
 "img_type": ".png", 
 "kfold": 5,
 "seed": 20,
